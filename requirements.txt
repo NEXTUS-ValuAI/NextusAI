@@ -1,6 +1,6 @@
-streamlit
+fastapi
+uvicorn
 yfinance
-plotly
 python-dotenv
 groq
 google-generativeai
