@@ -89,7 +89,7 @@ ValuAI/
 ```
 
 ## Kurulum
-### 1. Hızlı kurulum
+### 1. Hazır kurulum
 Repomuzda bulunan backend ve frontend klasörlerini indirip yeni açtığınız klasör yapısına ikisini de ekleyin.
 requirements.txt dosyasında bulunan gereksinimlerin kurulumunu yapın.
 Kurulum işlemi tamamlandıktan sonra kullanıma hazırdır.
