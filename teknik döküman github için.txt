@@ -1,0 +1,652 @@
+NEXTUS / NextusAI Teknik Açıklama
+
+1. Projenin Amacı
+
+NextusAI, yapay zekâ destekli hisse senedi değerleme ve finansal analiz platformudur. Projenin ana amacı, yatırımcının bir hisseyi yalnızca tek bir fiyat etiketiyle değil; canlı piyasa verisi, tarihsel fiyat eğilimi, benzer şirket karşılaştırması, temel finansal oranlar, açıklanabilir puanlama ve yapay zekâ yorumuyla birlikte değerlendirebilmesini sağlamaktır.
+
+Bu platform, kullanıcıya “bu hisse neden böyle puan aldı, teorik değeri ne, rakiplerine göre nerede duruyor, son 5 yılda nasıl davranmış, risk ve büyüme tarafında ne gösteriyor?” sorularının tamamına aynı ekranda yanıt vermeyi hedefler. Ürün, karar destek amaçlı tasarlanmıştır; yatırım tavsiyesi vermez. Teknik olarak odak noktası, veriyi toplamak, temizlemek, modele dönüştürmek, açıklanabilir hale getirmek ve erişilebilir biçimde sunmaktır.
+
+2. Genel Mimari
+
+Uygulama iki ana katmandan oluşur:
+
+- Backend: FastAPI tabanlı Python servisleri
+- Frontend: React + Vite tabanlı kullanıcı arayüzü
+
+Backend tarafı canlı piyasa verisini çeker, değerleme ve skor hesaplarını yapar, yapay zekâ raporu üretir ve sohbet/ses servislerini sağlar. Frontend tarafı bu verileri görsel paneller, grafikler, erişilebilir özetler, sesli okuma ve sohbet arayüzüyle kullanıcıya sunar.
+
+Projede ayrıca Docker desteği, örnek ortam değişkenleri ve otomatik hazırlık yapan kurulum scripti bulunur. Bu sayede proje hem yerelde hem de konteyner ortamında hızlıca ayağa kaldırılabilir.
+
+3. Backend Mimarisi
+
+3.1 FastAPI uygulaması
+
+Ana servis dosyası backend/main.py içindedir. FastAPI uygulaması "NextusAI API" adıyla başlar ve sürüm 2.0.0 olarak tanımlanır. Servis şu uç noktaları sunar:
+
+- GET / : sağlık ve durum bilgisi
+- GET /health : sağlık kontrolü
+- GET /analyze : hisse analizi
+- POST /chat : analiz edilmiş hisse için sohbet yanıtı
+- POST /tts/speak : Türkçe doğal ses üretimi
+- POST /tts/stop : istemci tarafı ses durdurma bildirimi
+
+API katmanında ayrıca CORS, hız sınırlama ve güvenlik başlıkları yapılandırılır. Varsayılan CORS adresleri yerel geliştirme için 5173 ve 3000 portlarını içerir. Güvenlik başlıkları olarak X-Content-Type-Options, X-Frame-Options, X-XSS-Protection ve Strict-Transport-Security eklenir.
+
+3.2 Hız sınırlama ve hata yönetimi
+
+Analyze ve chat uç noktaları slowapi ile korunur:
+
+- /analyze : 30 istek / dakika
+- /chat : 20 istek / dakika
+
+Hata durumları özel sınıflarla yönetilir:
+
+- StockNotFoundError → 404
+- ValidationError → 400
+- DataFetchError → 503
+- genel hata → 500
+
+Bu yapı, kullanıcıya ham Python hatası yerine anlaşılır Türkçe hata mesajı dönmek için kullanılır. Frontend tarafı da bu mesajları daha okunabilir hale getirir.
+
+3.3 Önbellek
+
+Backend tarafında SimpleCache adlı basit bir bellek içi önbellek kullanılır. Bu önbellek TTL mantığıyla çalışır ve analiz sonuçlarını yaklaşık 300 saniye saklar. Aynı sembol tekrar analiz edilirse backend tekrar veri çekmek yerine önbellekteki sonucu döndürebilir.
+
+Önemli not: docker-compose içinde Redis servisi tanımlanmıştır, ancak mevcut Python kodunda Redis entegrasyonu aktif olarak kullanılmaz. Yani uygulamanın çalışan önbelleği şu anda bellek içi önbellektir; Redis servisi gelecekte ölçekleme veya kalıcı önbellek için hazır bekler.
+
+4. Piyasa Veri Motoru
+
+Piyasa veri toplama işi backend/market_data.py içinde yapılır. Bu dosya projenin en kritik parçalarından biridir.
+
+4.1 Sembol çözümleme
+
+resolve_symbol fonksiyonu, kullanıcıdan gelen hisse kodunu doğrudan kabul etmek yerine farklı borsa ekleriyle dener. Örnek olarak şunları kontrol eder:
+
+- sembolün kendisi
+- .IS
+- .L
+- .TO
+- .NS
+- .BO
+- .HK
+- .SS
+- .SZ
+- .AX
+- .DE
+- .PA
+
+Bu yaklaşım, hem BIST sembollerini hem de bazı uluslararası sembolleri yfinance ile bulabilmek için kullanılır. İlk geçerli sonuç veren sembol seçilir.
+
+4.2 Veri çekme
+
+Seçilen sembol üzerinden yfinance.Ticker kullanılır ve 5 yıllık fiyat geçmişi alınır. Eğer tarihsel veri dolu değilse hisse geçersiz kabul edilir. Kullanılan önemli alanlar şunlardır:
+
+- currentPrice
+- previousClose
+- dayHigh
+- dayLow
+- trailingPE
+- forwardPE
+- priceToBook
+- trailingEps
+- bookValue
+- returnOnEquity
+- profitMargins
+- revenueGrowth
+- debtToEquity
+- currentRatio
+- beta
+- marketCap
+- enterpriseValue
+- targetMeanPrice
+- targetHighPrice
+- targetLowPrice
+
+4.3 Türetilen alanlar
+
+market_data.py yalnızca ham veri döndürmez; ayrıca türetilmiş alanlar da üretir:
+
+- current_price
+- week_52_low
+- week_52_high
+- price_position_52w
+- price_5y_start_price
+- price_5y_end_price
+- price_5y_change_pct
+- price_5y_cagr_pct
+- next_year_price_estimate
+- next_year_change_pct
+- history
+
+5 yıllık değişim şu formülle hesaplanır:
+
+- toplam değişim = (son fiyat - ilk fiyat) / ilk fiyat
+
+Yıllık bileşik büyüme oranı (CAGR) ise yaklaşık olarak şu mantıkla çıkar:
+
+- CAGR = ((son fiyat / ilk fiyat) ^ (1 / geçen yıl sayısı)) - 1
+
+next_year_price_estimate alanı da bu CAGR kullanılarak kaba bir gelecek yıl projeksiyonu üretir. Bu değer yatırım tavsiyesi değil, eğilim bazlı tahmindir.
+
+4.4 Fiyat geçmişi
+
+hist içindeki kapanış verileri normalize edilir ve her satır şu formda history listesine dönüştürülür:
+
+- date
+- close
+
+Bu liste frontend’de 5 yıllık fiyat eğrisi grafiği için kullanılır.
+
+5. Benzer Şirket Motoru
+
+Benzer şirket mantığı backend/comparables.py içinde tanımlanır.
+
+5.1 Grup seçimi
+
+choose_comparable_group fonksiyonu, hisse sembolüne ve sektör/endüstri metnine göre uygun karşılaştırmalı grubu seçer. Hazır gruplar şunlardır:
+
+- BIST Savunma
+- BIST Teknoloji
+- BIST Holding
+- BIST Ulaştırma
+- BIST Sanayi
+- Global Technology
+- Global Financials
+- Global Defense
+- Global Healthcare
+- Global Energy
+
+Türk hisseleri için sembol son ekine ve sembol desenine bakılır. Global hisseler için sektör ve endüstri metnindeki anahtar kelimeler kullanılır.
+
+5.2 Medyan hesaplama
+
+build_comparable_metrics fonksiyonu, seçilen grup içindeki şirketleri yfinance ile tarar ve şu alanları çıkarır:
+
+- trailingPE
+- priceToBook
+- marketCap
+
+Geçerli ve aykırı olmayan değerler alınır. median_clean fonksiyonu pozitif, geçerli ve belirlenen üst limitlerin altında kalan değerleri filtreleyerek medyan hesaplar. Böylece uç değerlerin model üzerinde aşırı etkisi azaltılır.
+
+Çıktı şu yapıyı verir:
+
+- sector_pe
+- sector_pb
+- rows
+
+rows alanı, her benzer şirket için sembol, şirket adı, F/K, PD/DD ve piyasa değeri içerir.
+
+6. Değerleme Motoru
+
+backend/valuation.py, teoretik değer hesaplamasını yapar.
+
+6.1 Girdi verileri
+
+Değerleme motoru şu alanları kullanır:
+
+- current_price
+- eps
+- book_value
+- target_mean_price
+- comparable_sector_pe
+- comparable_sector_pb
+- revenue_growth
+- beta
+- debt_to_equity
+
+6.2 Temel adil değer bileşenleri
+
+Üç ana model kullanılır:
+
+- F/K modeli = EPS x sektör medyan F/K
+- PD/DD modeli = Defter değeri x sektör medyan PD/DD
+- Analist hedef fiyatı = target_mean_price
+
+Bu üç bileşen ağırlıklı ortalama ile birleştirilir:
+
+- F/K modeli: %45
+- PD/DD modeli: %35
+- Analist hedefi: %20
+
+Veri eksikse sektör medyanları varsayılan olarak F/K için 18.0, PD/DD için 3.0 alınır. Eğer model değerleri oluşmazsa baz değer mevcut fiyatı kullanır.
+
+6.3 Büyüme ve risk ayarlamaları
+
+Base fair value oluşturulduktan sonra iki katsayı uygulanır:
+
+- growth_adjustment
+- risk_adjustment
+
+Büyüme ayarı gelir büyümesine göre pozitif ya da negatif etki yapar. Güçlü büyümede katsayı artar, negatif büyümede azalır.
+
+Risk ayarı ise beta ve borç/özkaynak oranına göre değişir. Beta yükseldikçe ve kaldıraç arttıkça katsayı düşer; düşük beta ve daha dengeli borç yapısı ise katsayıyı artırabilir.
+
+6.4 Nihai değer ve potansiyel
+
+final_fair_value = base_fair_value x growth_adjustment x risk_adjustment
+
+Potansiyel şu şekilde hesaplanır:
+
+- potential = (final_fair_value - current_price) / current_price x 100
+
+Sonuç etiketi potansiyel aralığına göre belirlenir:
+
+- %30 üzeri → görece ucuz / yüksek potansiyelli
+- %10 ile %30 arası → pozitif potansiyel
+- -%10 ile %10 arası → makul fiyat bandı
+- -%10 ile -%30 arası → sınırlı aşağı yönlü risk
+- -%30 altı → görece pahalı / aşağı yönlü risk yüksek
+
+7. Skorlama Motoru
+
+backend/scoring.py, açıklanabilir 5 faktörlü puanı üretir. Puanlar 0-100 ölçeğine çekilir ve toplam puan ağırlıklı olarak hesaplanır.
+
+7.1 Alt skorlar
+
+- Değerleme skoru (%30)
+- Kârlılık skoru (%25)
+- Büyüme skoru (%20)
+- Borçluluk skoru (%15)
+- Risk skoru (%10)
+
+7.2 Değerleme skoru
+
+F/K, PD/DD ve potansiyel birlikte değerlendirilir. Düşük çarpanlar ve yüksek teorik potansiyel skoru artırır; yüksek çarpanlar ve negatif potansiyel düşürür.
+
+7.3 Kârlılık skoru
+
+ROE ve kâr marjı dikkate alınır. Yüksek ROE ve yüksek marj puanı artırır. Negatif kârlılık veya düşük marj puanı düşürür.
+
+7.4 Büyüme skoru
+
+Gelir büyümesi ana girdidir. Ayrıca forward F/K ile geçmiş F/K karşılaştırılır; ileri dönem çarpanı geçmiş çarpandan daha iyi görünüyorsa skor desteklenir.
+
+7.5 Borçluluk skoru
+
+Borç/özkaynak oranı ve cari oran kullanılır. Düşük kaldıraç ve güçlü likidite pozitif etki yapar.
+
+7.6 Risk skoru
+
+Beta ve 52 haftalık fiyat konumu değerlendirilir. Düşük beta daha düşük oynaklık anlamına gelir. Fiyat 52 haftalık bandın üst kısmındaysa ve potansiyel zayıfsa risk skoru düşebilir.
+
+7.7 Nihai puan
+
+calculate_valuai_score fonksiyonu alt skorları şu ağırlıklarla birleştirir:
+
+- Değerleme: %30
+- Kârlılık: %25
+- Büyüme: %20
+- Borçluluk: %15
+- Risk: %10
+
+Skor etiketi ayrıca şu sınıflarla okunur:
+
+- 80+ → Güçlü
+- 65+ → Pozitif
+- 50+ → Dengeli
+- 35+ → Zayıf
+- altı → Riskli
+
+7.8 Piyasa eğilimi ve sinyaller
+
+market_mood_label fonksiyonu, toplam puan, potansiyel ve 52 haftalık konuma bakarak piyasa eğilimini belirler. build_factor_lists fonksiyonu ise puanın neden o seviyede olduğunu anlatan pozitif ve negatif sinyalleri üretir. Bu bölüm açıklanabilirlik için kritiktir.
+
+8. Yapay Zekâ Rapor Motoru
+
+backend/ai_engine.py, finansal verileri yapay zekâ ile açıklayıcı rapora dönüştürür.
+
+8.1 Prompt yapısı
+
+build_ai_prompt fonksiyonu modele ayrıntılı bir bağlam verir. İçinde şirket adı, sembol, sektör, fiyat, 52 haftalık bant, comparable grup, sektör medyan F/K ve PD/DD, teorik değerler, potansiyel, alt skorlar, risk etiketi, piyasa eğilimi, güçlü ve zayıf sinyaller yer alır.
+
+Prompt içindeki kurallar çok nettir:
+
+- Türkçe yaz
+- yatırım tavsiyesi verme
+- al/sat/tut gibi emir kipleri kullanma
+- veri yoksa uydurma
+- genel geçer cümle kurma
+- comparable değerlemeyi özellikle açıkla
+- maksimum 500 kelime
+- teknik ve profesyonel dashboard dili kullan
+
+8.2 Model seçimi
+
+İki sağlayıcı desteklenir:
+
+- Groq: llama-3.3-70b-versatile
+- Gemini: gemini-2.5-flash
+
+Groq varsa önce o denenir. Hata oluşursa Gemini’ye geçilir. İkisi de yoksa demo mod çalışır ve yerel verilerle üretilmiş sabit bir açıklama döner.
+
+8.3 Çıktı formatı
+
+Rapor üç bölümde okunacak şekilde tasarlanmıştır:
+
+- Değerleme Özeti
+- Kalite ve Risk
+- Panel Sonucu
+
+Bu yapı frontend’de de kartlara bölünerek gösterilir.
+
+9. Chatbot Motoru
+
+backend/chatbot.py analiz verisi üzerinden soru-cevap katmanını sağlar.
+
+9.1 Bağlam oluşturma
+
+build_chat_context fonksiyonu, analiz edilmiş hisse için tüm temel finansal verileri tekrar toparlar. Bu bağlamda şirket adı, sektör, mevcut fiyat, 52 haftalık bant, comparable grup, çarpanlar, teorik değer, potansiyel, alt skorlar, risk etiketi ve sinyal listeleri bulunur.
+
+9.2 Yanıt üretimi
+
+Groq ve Gemini için ayrı sohbet fonksiyonları vardır. Kurallar rapor motoruna benzer şekilde Türkçe cevap, yatırım tavsiyesi vermeme, veri dışına çıkmama ve kısa-anlaşılır anlatım üzerine kuruludur. Kullanıcı finans dışı bir soru sorarsa bot, nazikçe NextusAI kapsamına yönlendirilir.
+
+9.3 Demo mod
+
+API anahtarı yoksa demo cevap üretimi devreye girer. Bu mod, mevcut analiz verilerine bakarak kullanıcıyı boş bırakmayan bir metin üretir.
+
+10. Metin-Konuşma Desteği
+
+Backend/main.py içindeki /tts/speak uç noktası, edge-tts kütüphanesiyle Türkçe doğal ses üretir. Kullanılan ses:
+
+- tr-TR-AhmetNeural
+
+Konuşma hızı ve tonu da ayarlanır:
+
+- rate = -5%
+- pitch = +0Hz
+
+Bu uç nokta gelen metni akış halinde ses verisine çevirir ve audio/mpeg döndürür. /tts/stop uç noktası ise istemcinin ses oynatımı durdurduğunu bildirir.
+
+11. Veri Modelleri ve İstisnalar
+
+backend/schemas.py içinde Pydantic modelleri kullanılır. Bu modeller veri yapısını standardize eder.
+
+Önemli modeller:
+
+- StockMetrics
+- ValuationData
+- ScoreBreakdown
+- SignalData
+- ComparableRow
+- ComparableData
+- PriceHistory
+- AIReport
+- AnalysisResponse
+- ChatRequest
+- ChatResponse
+- SpeechRequest
+- SpeechResponse
+- ErrorResponse
+
+backend/exceptions.py içinde özel istisnalar bulunur:
+
+- StockNotFoundError
+- DataFetchError
+- APIRateLimitError
+- ValidationError
+- AIServiceError
+
+Bu istisnalar API’nin hata mesajlarını kontrollü ve kullanıcı dostu şekilde dönmesini sağlar.
+
+12. Frontend Mimarisi
+
+Frontend, Vite + React + TailwindCSS üzerine kuruludur. Giriş noktası frontend/src/main.jsx dosyasıdır; burada React.StrictMode ile App bileşeni render edilir.
+
+12.1 Global durum yönetimi
+
+AnalysisContext, uygulamanın ana durumunu tutar:
+
+- symbol
+- data
+- loading
+- error
+- cache
+- toast
+
+Bu yapı sayesinde arama sembolü, analiz sonucu, yüklenme durumu ve hata mesajları tek merkezden yönetilir.
+
+12.2 Analiz hook’u
+
+useStockAnalysis hook’u analiz çağrısını sarar. Sembol boşsa hata üretir, cache’te sonuç varsa önce onu kullanır, yoksa API’ye gider. Gelen HTTP kodlarına göre Türkçe hata mesajları üretilir:
+
+- 404 → hisse bulunamadı
+- 400 → geçersiz sembol
+- 503 → veri kaynağı geçici olarak kullanılamıyor
+- network error → backend çalışmıyor olabilir
+
+12.3 API istemcisi
+
+frontend/src/api/nextusApi.js içinde iki ayrı axios istemcisi vardır:
+
+- normal istemci: analiz ve sohbet çağrıları için
+- speech istemcisi: ses isteği için
+
+Base URL, VITE_API_URL üzerinden okunur; yoksa varsayılan olarak localhost:8000 kullanılır. Speech tarafında aktif ses oynatımı AbortController ile yönetilir. Kullanıcı yeni ses başlatırsa önceki oynatma durdurulabilir. Hata interceptor’ları, backend’den gelen response detail alanını anlamlı bir mesaj olarak taşır.
+
+12.4 Ana uygulama akışı
+
+App.jsx dosyası sayfanın bütün davranışını yönetir. Akış şu şekildedir:
+
+- Kullanıcı hisse kodu girer
+- Analiz başlatılır
+- Yüklenme ekranı gösterilir
+- Veri geldiyse sonuç panelleri oluşturulur
+- Erişilebilir mod açıksa sade arayüz ve sesli bileşenler aktif edilir
+
+Uygulama ayrıca aşağıdaki davranışları destekler:
+
+- aria-live duyuruları ile ekran okuyucuya durum bildirme
+- localStorage ile erişilebilir mod tercihini saklama
+- sonuçlara otomatik odak geçme
+- ana klavye kısayolları
+
+Klavyeden çalışan kısayollar:
+
+- Alt+Shift+X → erişilebilir modu aç/kapat
+- Alt+Shift+S → arama kutusuna git
+- Alt+Shift+A → analizi başlat
+- Alt+Shift+V → sesli özeti oku
+- Alt+Shift+C → sesli komutu başlat
+- Alt+Shift+R → sonuçlara git
+
+12.5 Ekran bileşenleri
+
+Ana sayfada şu bölümler bulunur:
+
+- Navbar
+- Hero
+- SearchPanel
+- AnalysisHeader
+- AccessibleSummaryPanel
+- AccessibleVoiceSummary
+- PriceOverviewPanel
+- ScoreBreakdown
+- ValuationModel
+- PriceChart
+- ScoreRadar
+- SignalPanel
+- ComparableTable
+- AIReport
+- Chatbot
+- TutorialModal
+
+Boş durum için EmptyState, yükleme için LoadingSkeleton, hata için ErrorPanel ve çökme durumunda ErrorBoundary kullanılır. Toast bileşeni, başarı/hata bildirimlerini kısa süreli gösterir.
+
+12.6 Grafik ve panel detayları
+
+PriceChart bileşeni, Recharts kullanarak 5 yıllık fiyat eğrisini çizer. Erişilebilirlik için sr-only özet metni de verir. Son kapanışı ve trend yönünü açıklayıcı metinle belirtir.
+
+ScoreRadar bileşeni, beş boyutlu skor profilini radar grafikte sunar: değerleme, kârlılık, büyüme, borçluluk ve risk.
+
+PriceOverviewPanel, uzun vadeli fiyat görünümünü ayrı bir özet olarak gösterir. İçinde:
+
+- 5 yıl başlangıç fiyatı
+- bugünkü fiyat
+- 5 yıllık toplam değişim
+- 5Y CAGR
+- 1 yıl tahmini fiyat
+- 1 yıl değişim yüzdesi
+
+bulunur.
+
+ScoreBreakdown, skorları açılır/kapanır panelde gösterir. Her faktörün ağırlığı ayrıca görünür:
+
+- Değerleme %30
+- Kârlılık %25
+- Büyüme %20
+- Borçluluk %15
+- Risk %10
+
+ValuationModel, F/K modeli, PD/DD modeli ve analist hedef fiyatı gibi bileşenlerin ağırlıklı birleşimini gösterir. Büyüme ve risk ayarlamalarını da ayrı olarak açıklar.
+
+ComparableTable, benzer şirket evrenini listeler ve her şirket için F/K, PD/DD ve piyasa değerini gösterir.
+
+SignalPanel, güçlü sinyaller ve izlenmesi gereken noktaları ayrı ayrı listeler.
+
+AIReport, yapay zekâ raporunu bölüm bölüm okur. Markdown biçimindeki numaralı bölümleri kartlara ayırır ve kalın yazılan parçaları vurgular.
+
+12.7 Erişilebilirlik modu
+
+Projede erişilebilirlik ayrı bir tasarım katmanı olarak ele alınmıştır. Görme engelli kullanıcılar için aşağıdaki parçalar çalışır:
+
+- erişilebilir özet paneli
+- sesli özet paneli
+- sesli komut paneli
+- klavye kısayolları paneli
+- sadeleştirilmiş arayüz
+
+AccessibleSummaryPanel, analiz özünü kısa, anlaşılır ve konuşulabilir bir metne dönüştürür. Bu metin NextusAI Puanı, risk seviyesi, piyasa eğilimi, teorik değer, potansiyel, en güçlü sinyal ve en büyük risk gibi alanları tek paragrafta toplar.
+
+AccessibleVoiceSummary, bu özeti Türkçe erkek sesle okur. speakText ve stopSpeech fonksiyonları üzerinden backend’e bağlanır. Sesli okuma başlat, durdur ve tekrar oku aksiyonları için ayrı butonlar vardır.
+
+AccessibilityShortcutsPanel, Alt+Shift kısayollarını kullanıcıya görsel kartlarla anlatır. Bu kartlar aynı zamanda etkileşimli butonlardır.
+
+VoiceCommandPanel, tarayıcının Web Speech API desteğini kullanarak mikrofonla komut almaya çalışır. Komut biçimi "ASELS analiz et" şeklindedir. extractVoiceCommandSymbol fonksiyonu bu cümleden sembolü ayıklar ve analiz akışını tetikler.
+
+summaryHelpers.js dosyası, konuşma için metni doğal hale getirir. ValuAI gibi marka adlarını NextusAI’ye çevirir, F/K ve PD/DD gibi kısaltmaları sesli okuma için sadeleştirir, uygun Türkçe ses seçimini heuristik olarak yapar.
+
+12.8 Stil ve görsel sistem
+
+frontend/src/index.css dosyası Tailwind temeli üzerine kurulu özel erişilebilirlik sınıfları içerir:
+
+- skip-link: klavyeyle direkt ana içeriğe atlama
+- a11y-high-contrast: yüksek kontrast modu
+- a11y-large-text: büyük yazı modu
+- a11y-accessible-mode: sadeleştirilmiş erişilebilir arayüz
+- prefers-reduced-motion: animasyon azaltma desteği
+
+Ayrıca fadeIn, slideIn, pulse-glow, float ve gradient-shift gibi animasyonlar tanımlanmıştır. Bu animasyonlar, erişilebilir mod açıkken azaltılacak şekilde ayarlanmıştır.
+
+13. Kullanıcı Deneyimi Akışı
+
+Kullanıcı akışı şu mantıkla çalışır:
+
+1. Kullanıcı hisse kodu girer veya hızlı seçim düğmelerinden birini seçer.
+2. Analiz isteği backend’e gider.
+3. Backend sembolü çözer, canlı veriyi çeker, 5 yıllık geçmişi alır.
+4. Benzer şirket grubunu seçer ve medyan çarpanları hesaplar.
+5. Adil değer, potansiyel ve skorları üretir.
+6. Yapay zekâ raporu ve chatbot bağlamı hazırlanır.
+7. Frontend sonuçları kartlar, grafikler, özetler ve erişilebilir bileşenlerle gösterir.
+8. Kullanıcı isterse chatbot’a yazılı veya sesli soru sorar.
+9. Erişilebilir mod açıksa sesli özet ve sesli komut desteği devreye girer.
+
+14. Kurulum ve Dağıtım
+
+14.1 Frontend paketleri
+
+frontend/package.json içindeki temel paketler:
+
+- react, react-dom
+- axios
+- framer-motion
+- lucide-react
+- recharts
+- tailwindcss
+- @tailwindcss/vite
+
+Geliştirme paketleri:
+
+- vite
+- eslint
+- @eslint/js
+- eslint-plugin-react-hooks
+- eslint-plugin-react-refresh
+- globals
+- @types/react
+- @types/react-dom
+
+14.2 Docker
+
+backend/Dockerfile, Python 3.11-slim tabanlıdır. requirements.txt yüklenir, sonra uygulama uvicorn ile 8000 portunda çalıştırılır.
+
+frontend/Dockerfile çok aşamalıdır. İlk aşamada Node 18-alpine ile uygulama derlenir, ikinci aşamada Nginx üzerinden statik dosyalar servis edilir. Nginx yapılandırması nginx.conf ile eklenir.
+
+docker-compose.yml üç servis tanımlar:
+
+- backend
+- frontend
+- redis
+
+Backend 8000 portunda, frontend 3000 portunda yayınlanır. Frontend servisinde VITE_API_URL backend servisine yönlendirilir. Redis servisi bir veri deposu olarak hazırdır; mevcut Python kodu bu servisi aktif olarak kullanmaz.
+
+14.3 Kurulum scripti
+
+kurulum.py, projeyi hazırlamak için yazılmış yardımcı betiktir. Görevleri şunlardır:
+
+- backend ve frontend için .env.example dosyalarından .env oluşturmak
+- eksik klasörleri kontrol etmek
+- gerekirse .venv oluşturmak
+- Python bağımlılıklarını kurmak
+- npm varsa frontend bağımlılıklarını kurmak
+
+Script şu argümanları destekler:
+
+- --kur : bağımlılıkları da kur
+- --zorla-env : mevcut .env dosyalarını tekrar yaz
+
+Bu betik, jürinin veya kullanıcının projeyi tek komutla kullanıma hazırlayabilmesi için eklenmiştir.
+
+15. Ortam Değişkenleri
+
+Backend ortam değişkenleri:
+
+- GROQ_API_KEY
+- GEMINI_API_KEY
+- ALLOWED_ORIGINS
+- LOG_LEVEL
+
+Frontend ortam değişkenleri:
+
+- VITE_API_URL
+- VITE_ANALYTICS_ID
+- VITE_ENVIRONMENT
+
+API anahtarları yoksa sistem demo moda düşer; yani canlı LLM yanıtı yerine yerel verilerden üretilmiş açıklama döndürür. Bu, demo ve sunum aşamasında projenin tamamen boş kalmamasını sağlar.
+
+16. Projenin Güçlü Yanları
+
+- Canlı veri kullanımı vardır.
+- 5 yıllık tarihsel fiyat analizi vardır.
+- Comparable valuation ile emsal kıyaslaması yapılır.
+- Açıklanabilir skor sistemi kullanılır.
+- Yapay zekâ raporu ve chatbot desteği vardır.
+- Erişilebilirlik ayrı bir özellik olarak tasarlanmıştır.
+- Sesli özet ve sesli komut desteklenir.
+- Docker ve kurulum scripti ile kurulum kolaylaştırılmıştır.
+- Hata yönetimi ve kullanıcı geri bildirimi düşünülmüştür.
+
+17. Sınırlamalar ve Teknik Notlar
+
+- Piyasa verisi kaynağı Yahoo Finance’tır; dış servis geçici olarak kapanırsa veri çekme başarısız olabilir.
+- Groq ve Gemini API anahtarları yoksa yapay zekâ raporu demo modda çalışır.
+- Önbellek şu anda bellek içidir; uygulama yeniden başlarsa sıfırlanır.
+- Veri tabanı veya kullanıcı oturumu sistemi yoktur; ürün analiz odaklıdır.
+- Redis servisi docker-compose içinde hazırdır fakat mevcut backend kodunda aktif bağlantı katmanı yoktur.
+
+18. Sonuç
+
+Bu proje, bir hisse senedinin sadece fiyatını değil; tarihsel hareketini, çarpanlarını, benzer şirketlerine göre konumunu, açıklanabilir skorunu, teorik değerini ve yapay zekâ yorumunu tek bir platformda birleştiren tam yığın bir finans analiz sistemidir.
+
+Teknik olarak sistem; veri toplama, veri normalizasyonu, karşılaştırmalı değerleme, çok faktörlü skor üretimi, yapay zekâ raporlama, sohbet yanıtı, sesli okuma ve erişilebilir arayüz katmanlarını birlikte çalıştırır. Bu nedenle proje, yalnızca bir arayüz değil; karar destek sağlayan bütünleşik bir finans motoru olarak tasarlanmıştır.
