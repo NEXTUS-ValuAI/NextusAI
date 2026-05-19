@@ -58,7 +58,7 @@ NextusAI, canlı piyasa verisi, comparable valuation, açıklanabilir skor siste
 
 ## Proje Yapısı
 
-
+```text
 ValuAI/
 ├── backend/
 │   ├── main.py
@@ -81,7 +81,7 @@ ValuAI/
 │   └── .env.example
 ├── docker-compose.yml
 ├── kurulum.py
-├── requirements.txt
+└── requirements.txt
 
 ```
 
