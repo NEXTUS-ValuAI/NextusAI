@@ -1,27 +1,14 @@
-# Build stage
-FROM node:18-alpine AS build
+FROM python:3.11-slim
 
 WORKDIR /app
 
 # Install dependencies
-COPY package*.json .
-RUN npm ci
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app
+# Copy application
 COPY . .
 
-# Build
-RUN npm run build
-
-# Production stage
-FROM nginx:alpine
-
-# Copy built app
-COPY --from=build /app/dist /usr/share/nginx/html
-
-# Nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]
+# Run
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
