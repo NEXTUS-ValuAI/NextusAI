@@ -1,15 +1,20 @@
 import math
 import yfinance as yf
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def safe_float(value):
+    """Safely convert value to float"""
     try:
         if value is None:
             return None
         if isinstance(value, float) and math.isnan(value):
             return None
         return float(value)
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Failed to convert {value} to float: {e}")
         return None
 
 
@@ -34,7 +39,7 @@ def resolve_symbol(user_symbol: str):
     for symbol in possible_symbols:
         try:
             stock = yf.Ticker(symbol)
-            hist = stock.history(period="1y")
+            hist = stock.history(period="5y")
 
             if not hist.empty:
                 info = stock.info
@@ -53,10 +58,49 @@ def get_market_data(user_symbol: str):
         return None
 
     close_prices = hist["Close"].dropna()
+    close_count = len(close_prices)
 
     current_price = safe_float(info.get("currentPrice")) or safe_float(close_prices.iloc[-1])
-    week_52_low = safe_float(close_prices.min())
-    week_52_high = safe_float(close_prices.max())
+    week_52_slice = close_prices.tail(252)
+    week_52_low = safe_float(info.get("fiftyTwoWeekLow")) or safe_float(week_52_slice.min())
+    week_52_high = safe_float(info.get("fiftyTwoWeekHigh")) or safe_float(week_52_slice.max())
+
+    five_year_start_price = safe_float(close_prices.iloc[0]) if close_count else None
+    five_year_end_price = safe_float(close_prices.iloc[-1]) if close_count else None
+
+    if close_count >= 2:
+      first_timestamp = hist.index[0]
+      last_timestamp = hist.index[-1]
+      elapsed_years = max((last_timestamp - first_timestamp).days / 365.25, 0.01)
+    else:
+      elapsed_years = None
+
+    if (
+        five_year_start_price is not None
+        and five_year_start_price > 0
+        and five_year_end_price is not None
+    ):
+        price_5y_change_pct = ((five_year_end_price - five_year_start_price) / five_year_start_price) * 100
+    else:
+        price_5y_change_pct = None
+
+    if (
+        five_year_start_price is not None
+        and five_year_start_price > 0
+        and five_year_end_price is not None
+        and elapsed_years is not None
+    ):
+        price_5y_cagr_pct = (((five_year_end_price / five_year_start_price) ** (1 / elapsed_years)) - 1) * 100
+    else:
+        price_5y_cagr_pct = None
+
+    forecast_base_price = current_price or five_year_end_price
+    if forecast_base_price is not None and price_5y_cagr_pct is not None:
+        next_year_price_estimate = forecast_base_price * (1 + (price_5y_cagr_pct / 100))
+        next_year_change_pct = price_5y_cagr_pct
+    else:
+        next_year_price_estimate = None
+        next_year_change_pct = None
 
     if (
         current_price is not None
@@ -111,6 +155,13 @@ def get_market_data(user_symbol: str):
         "week_52_low": week_52_low,
         "week_52_high": week_52_high,
         "price_position_52w": price_position_52w,
+
+        "price_5y_start_price": five_year_start_price,
+        "price_5y_end_price": five_year_end_price,
+        "price_5y_change_pct": price_5y_change_pct,
+        "price_5y_cagr_pct": price_5y_cagr_pct,
+        "next_year_price_estimate": next_year_price_estimate,
+        "next_year_change_pct": next_year_change_pct,
 
         "history": history,
     }
