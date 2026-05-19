@@ -1,3 +1,6 @@
+<p align="center">
+  <img src="logo.png" alt="ValuAI Logo" width="200">
+</p>
 # NextusAI
 NextusAI, canlı piyasa verisi, comparable valuation, açıklanabilir skor sistemi, AI raporlama ve finansal chatbot içeren tam yığın bir finans analizi uygulamasıdır.
 
