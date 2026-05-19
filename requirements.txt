@@ -1,7 +1,0 @@
-streamlit
-yfinance
-plotly
-python-dotenv
-groq
-google-generativeai
-pandas
