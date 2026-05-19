@@ -1,7 +1,0 @@
-fastapi
-uvicorn
-yfinance
-python-dotenv
-groq
-google-generativeai
-pandas
