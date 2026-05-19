@@ -89,8 +89,12 @@ ValuAI/
 ```
 
 ## Kurulum
-
 ### 1. Hızlı kurulum
+Repomuzda bulunan backend ve frontend klasörlerini indirip yeni açtığınız klasör yapısına ikisini de ekleyin.
+requirements.txt dosyasında bulunan gereksinimlerin kurulumunu yapın.
+Kurulum işlemi tamamlandıktan sonra kullanıma hazırdır.
+
+### 2. Hızlı kurulum
 
 Bu proje için önerilen yol kurulum scriptidir. Script hem örnek ortam dosyalarını hazırlar hem de istenirse bağımlılıkları kurar.
 
@@ -118,7 +122,7 @@ Mevcut `.env` dosyalarının üzerine yazmak istersen:
 python kurulum.py --kur --zorla-env
 ```
 
-### 2. Manuel kurulum
+### 3. Manuel kurulum
 
 #### Backend
 
@@ -152,7 +156,7 @@ Frontend adresi:
 http://localhost:5173
 ```
 
-### 3. Docker ile kurulum
+### 4. Docker ile kurulum
 
 Docker ve Docker Compose kuruluysa en kısa yol budur.
 
