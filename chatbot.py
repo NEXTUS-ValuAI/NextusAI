@@ -36,7 +36,7 @@ Final teorik değer: {data.get("final_fair_value")}
 Potansiyel: {data.get("potential")}
 Panel sonucu: {data.get("valuation_result")}
 
-ValuAI Score: {data.get("valuai_score")}/100
+NextusAI Puanı: {data.get("valuai_score")}/100
 Değerleme skoru: {data.get("valuation_score")}/100
 Kârlılık skoru: {data.get("profitability_score")}/100
 Büyüme skoru: {data.get("growth_score")}/100
@@ -44,7 +44,7 @@ Borçluluk skoru: {data.get("debt_score")}/100
 Risk skoru: {data.get("risk_score")}/100
 
 Risk etiketi: {data.get("risk_label")}
-Market Mood: {data.get("market_mood")}
+Piyasa Eğilimi: {data.get("market_mood")}
 
 Güçlü sinyaller:
 {data.get("positive_signals")}
@@ -72,17 +72,18 @@ def get_groq_chat_response(data, question):
         {
             "role": "system",
             "content": f"""
-Sen ValuAI platformunun finansal chatbot asistanısın.
+Sen NextusAI platformunun finansal chatbot asistanısın.
 
 Kesin kurallar:
 - Türkçe cevap ver.
 - Yatırım tavsiyesi verme.
 - "Al", "sat", "tut", "kesin alınır" gibi emir cümleleri kurma.
-- Kullanıcı finans dışı soru sorarsa nazikçe ValuAI kapsamına yönlendir.
+- Kullanıcı finans dışı soru sorarsa nazikçe NextusAI kapsamına yönlendir.
 - Elindeki analiz verilerine dayan.
 - Veri yoksa uydurma.
 - Kısa, net ve anlaşılır cevap ver.
 - Gerektiğinde F/K, PD/DD, ROE, beta, borç/özkaynak gibi kavramları basitçe açıkla.
+- Marka adını NextusAI olarak kullan; eski markayı yazma.
 - Cevabın sonunda uygun olduğunda "Bu yorum yatırım tavsiyesi değildir." ifadesini kullan.
 
 Mevcut analiz verileri:
@@ -109,7 +110,7 @@ def get_gemini_chat_response(data, question):
     context = build_chat_context(data)
 
     prompt = f"""
-Sen ValuAI platformunun finansal chatbot asistanısın.
+Sen NextusAI platformunun finansal chatbot asistanısın.
 
 Kurallar:
 - Türkçe cevap ver.
@@ -118,6 +119,7 @@ Kurallar:
 - Elindeki analiz verilerine dayan.
 - Veri yoksa uydurma.
 - Kısa ve anlaşılır cevap ver.
+- Marka adını NextusAI olarak kullan; eski markayı yazma.
 
 Mevcut analiz verileri:
 {context}
@@ -135,9 +137,9 @@ Kullanıcı sorusu:
 
 def get_demo_chat_response(data, question):
     return f"""
-Bu soruyu mevcut ValuAI analiz verilerine göre cevaplayabilirim.
+Bu soruyu mevcut NextusAI analiz verilerine göre cevaplayabilirim.
 
-{data.get("company_name")} için ValuAI Score **{data.get("valuai_score")}/100**, risk etiketi **{data.get("risk_label")}**, market mood ise **{data.get("market_mood")}** olarak hesaplanmıştır.
+{data.get("company_name")} için NextusAI Puanı **{data.get("valuai_score")}/100**, risk etiketi **{data.get("risk_label")}**, piyasa eğilimi ise **{data.get("market_mood")}** olarak hesaplanmıştır.
 
 Öne çıkan güçlü sinyaller:
 {data.get("positive_signals")}

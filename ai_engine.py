@@ -52,10 +52,10 @@ Defter değeri: {data.get("book_value")}
 F/K bazlı teorik değer: {data.get("pe_fair_value")}
 PD/DD bazlı teorik değer: {data.get("pb_fair_value")}
 Baz teorik değer: {data.get("base_fair_value")}
-Final ValuAI teorik değer: {data.get("final_fair_value")}
+Final NextusAI teorik değer: {data.get("final_fair_value")}
 Potansiyel: %{data.get("potential")}
 
-ValuAI Score: {data.get("valuai_score")}/100
+NextusAI Puanı: {data.get("valuai_score")}/100
 Değerleme skoru: {data.get("valuation_score")}/100
 Kârlılık skoru: {data.get("profitability_score")}/100
 Büyüme skoru: {data.get("growth_score")}/100
@@ -131,14 +131,14 @@ def get_demo_response(data):
     return f"""
 **1. Değerleme Özeti**
 
-{data.get("company_name")} için ValuAI Score **{data.get("valuai_score")}/100** seviyesindedir. 
-Comparable model sonucunda final teorik değer **{data.get("final_fair_value")} {data.get("currency")}**, mevcut fiyat ise **{data.get("current_price")} {data.get("currency")}** seviyesindedir. 
+{data.get("company_name")} için NextusAI Puanı **{data.get("valuai_score")}/100** seviyesindedir. 
+Karşılaştırmalı model sonucunda final teorik değer **{data.get("final_fair_value")} {data.get("currency")}**, mevcut fiyat ise **{data.get("current_price")} {data.get("currency")}** seviyesindedir. 
 Modelin hesapladığı potansiyel **%{data.get("potential")}** düzeyindedir.
 
 **2. Kalite ve Risk**
 
 Bu skor; değerleme, kârlılık, büyüme, borçluluk ve risk bileşenlerinin ağırlıklı birleşiminden oluşmaktadır. 
-Risk etiketi **{data.get("risk_label")}**, market mood ise **{data.get("market_mood")}** olarak hesaplanmıştır.
+Risk etiketi **{data.get("risk_label")}**, piyasa eğilimi ise **{data.get("market_mood")}** olarak hesaplanmıştır.
 
 **3. Panel Sonucu**
 
